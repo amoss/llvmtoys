@@ -1,2 +1,8 @@
 **/.*swp
 .localenv
+tests/netdata/netdata.git
+tests/netdata/units
+tests/netdata/install
+tests/netdata/make.trace
+tests/netdata/make.units
+tests/netdata/build.sh
