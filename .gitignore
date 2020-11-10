@@ -6,3 +6,6 @@ tests/netdata/install
 tests/netdata/make.trace
 tests/netdata/make.units
 tests/netdata/build.sh
+tests/netdata/staticlibs.list
+tests/netdata/extlibs.list
+tests/netdata/units.list
