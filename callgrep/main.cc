@@ -1,4 +1,6 @@
 #include <iostream>
+#include <set>
+#include <string>
 
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
@@ -14,6 +16,34 @@
 #include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/SMLoc.h"
 #include "llvm/Support/SourceMgr.h"
+
+void callPathsDFS(llvm::CallGraphNode* node, std::vector<std::string> &path,
+                  std::set<llvm::CallGraphNode*> &visited) {
+    visited.insert(node);
+    llvm::Function *F = node->getFunction();
+    if (F && F->hasName()) {
+        path.push_back(F->getName().str());
+        llvm::outs() << "Visiting ";
+        for(auto P: path)
+            llvm::outs() << P << " ";
+        llvm::outs() << "\n";
+    }
+    for (auto called: *node) {
+        if (visited.find(called.second) == visited.end()) {
+            callPathsDFS(called.second, path, visited);
+        }
+    }
+    if (F && F->hasName())
+        path.pop_back();
+}
+
+void callPaths(llvm::CallGraph &cg) {
+    std::set<llvm::CallGraphNode*> visited;
+    auto *entry = cg.getExternalCallingNode();
+    std::vector<std::string> path;
+    callPathsDFS(entry, path, visited);
+}
+
 
 int main(int argc, char **argv) {
     if (argc < 2) {
@@ -40,7 +70,8 @@ int main(int argc, char **argv) {
     }
 
     llvm::CallGraph cg(WP);
-    cg.print(llvm::outs());
+    //cg.print(llvm::outs());
+    callPaths(cg);
 
 
 
