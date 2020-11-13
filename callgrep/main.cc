@@ -63,6 +63,14 @@ void callPathsDFS(llvm::CallGraphNode* node, std::vector<std::string> &path,
 }
 
 
+void emitResult(std::vector<std::string> &path) {
+    llvm::outs() << "Match: ";
+    for(auto P: path)
+        llvm::outs() << P << " ";
+    llvm::outs() << "\n";
+}
+
+
 int matchNodeName(const char *regex, const char *name) {
     const char *start = regex;
     //std::cout << "Test: " << regex << " -> " << name << std::endl;
@@ -111,42 +119,80 @@ int matchNodeName(const char *regex, const char *name) {
 }
 
 // DFS then match
-int match(llvm::CallGraphNode* node, std::vector<std::string> &path, char *regex) {
+int matchHere(llvm::CallGraphNode* node, std::vector<std::string> &path, std::set<llvm::CallGraphNode*> &visited, char *regex);
+int match(llvm::CallGraphNode* node, std::vector<std::string> &path, std::set<llvm::CallGraphNode*> &visited, bool exact, char *regex) {
+    visited.insert(node);
+    int n = strlen(regex);
+    int m = matchHere(node, path, visited, regex);
+    if (m==n) {
+        // emit result
+    }
+    if (exact) {
+        return m;
+    }
+
+    for (auto called: *node) {
+        if (visited.find(called.second) == visited.end()) {
+            match(called.second, path, visited, false, regex);
+        }
+    }
     return -1;
 }
 
 // MUST match node name then DFS
-int matchHere(llvm::CallGraphNode* node, std::vector<std::string> &path, char *regex) {
+int matchHere(llvm::CallGraphNode* node, std::vector<std::string> &path, std::set<llvm::CallGraphNode*> &visited, char *regex) {
     auto *F = node->getFunction();
-    if (!F->hasName())
+    if (!F || !F->hasName())            // TODO: What are the nodes without functions?
         return -1;
     std::string name = F->getName().str();
     int m = matchNodeName(regex,name.c_str());
     if (m<0)
         return -1;
     regex += m;
-    // ... change path?
-    return match(node,path,regex);
+
+    path.push_back(name);
+    if (*regex==0) {
+        emitResult(path);
+        path.pop_back();
+        return m;
+    }
+    if (*regex=='>' && regex[1]=='+') {
+        int r;
+        if (regex[1]=='+')
+            r = match(node,path,visited,false,regex+2);
+        else
+            r = match(node,path,visited,true,regex+1);
+        path.pop_back();
+        if (r>=0)
+            return r+m;
+        return -1;
+    }
+    throw "Illegal regex";
 }
 
 void regexCG(llvm::CallGraph &cg, char *regex) {
     std::set<llvm::CallGraphNode*> visited;
     auto *outside = cg.getExternalCallingNode();
     std::vector<std::string> path;
-    int n = strlen(regex);
+    int m, n = strlen(regex);
     for (auto entry: *outside) {
-        path.clear();
         auto *F = entry.second->getFunction();
-        if (!F->hasName())
+        if (!F) {
+            std::cout << "Skipping entry with no function? " << entry.second << std::endl;
             continue;
-        std::string name = F->getName().str();
+        }
+        path.clear();
+        visited.clear();
+        if (*regex=='^')
+            m = matchHere(entry.second, path, visited, regex+1);
+        else
+            m = match(entry.second, path, visited, false, regex);
+        /*std::string name = F->getName().str();
         int m = matchNodeName(regex, name.c_str());
-        std::cout << "Testing " << name << " " << n << " " << m << std::endl;
+        std::cout << "Testing " << name << " " << n << " " << m << std::endl;*/
     }
 
     return;
-
-//    callPathsDFS(entry, path, visited);
 }
 
 int main(int argc, char **argv) {
