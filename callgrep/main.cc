@@ -30,6 +30,7 @@
     Examples:
             .*                     any (reachable) function in the program
             .*>.*                  any caller/callee pair
+            foo.*>.*mutex.*        any caller/callee pair where the caller-name starts with foo, callee contains mutex
             .*>+.*                 any path through the call-graph
             .*>+.*thread           any path that ends in a function whose name ends in "thread"
             main>uv_.*             any call from main to a function whose name starts in "uv_"
@@ -81,7 +82,7 @@ int matchNodeName(const char *regex, const char *name) {
             return -1;
         }
 
-        if ( (*regex>='a' && *regex<='z') || (*regex>='A' && *regex<='Z') || 
+        if ( (*regex>='a' && *regex<='z') || (*regex>='A' && *regex<='Z') ||
              (*regex>='0' && *regex<='9') || *regex=='_' || *regex=='.') {
             if (regex[1]=='*') {
                 while( (*regex=='.' && *name!=0) || *regex==*name)
@@ -177,22 +178,24 @@ void regexCG(llvm::CallGraph &cg, char *regex) {
     std::set<llvm::CallGraphNode*> visited;
     auto *outside = cg.getExternalCallingNode();
     std::vector<std::string> path;
-    int m, n = strlen(regex);
-    for (auto entry: *outside) {
-        auto *F = entry.second->getFunction();
-        if (!F) {
-            std::cout << "Skipping entry with no function? " << entry.second << std::endl;
-            continue;
-        }
-        path.clear();
-        visited.clear();
-        if (*regex=='^')
+    if (*regex=='^') {
+        for (auto entry: *outside) {
+            auto *F = entry.second->getFunction();
+            if (!F)
+                continue;
+            path.clear();
+            visited.clear();
             match(entry.second, path, visited, false, regex+1);
-        else
-            match(entry.second, path, visited, true,  regex);
+        }
     }
-
-    return;
+    else {
+        for (auto &N: cg)
+        {
+            path.clear();
+            visited.clear();
+            match(N.second.get(), path, visited, false,  regex);
+        }
+    }
 }
 
 int main(int argc, char **argv) {
@@ -220,7 +223,6 @@ int main(int argc, char **argv) {
     }
 
     llvm::CallGraph cg(WP);
-    //cg.print(llvm::outs());
     try {
       regexCG(cg, argv[1]);
     }
