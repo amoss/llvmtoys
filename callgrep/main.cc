@@ -136,8 +136,6 @@ void match(llvm::CallGraphNode* node, std::vector<std::string> &path, std::set<l
     path.push_back(name);
 
     if (*regex=='>') {
-        char *nxtRegex;
-        bool nxtOrMany;
         if (regex[1]=='+')
             matchSuccs(node, path, visited, true,  regex+2);
         else
