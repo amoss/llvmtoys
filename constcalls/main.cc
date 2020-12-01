@@ -22,6 +22,7 @@
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LegacyPassNameParser.h"
+#include "llvm/IR/ValueSymbolTable.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 #include "llvm/Transforms/IPO.h"
 
@@ -55,7 +56,46 @@ llvm::Function *findFunction(llvm::Module &WP, const char *fname) {
     return NULL;
 }
 
-void analyseFunction(llvm::Function *F, RegionValue &rv) {
+void analyseFunction(llvm::Function *F) { //, RegionValue &rv) {
+    llvm::outs() << "Analysis of " << F->getName() << "\n";
+    std::set<llvm::Value*> values;
+    std::set<llvm::Instruction*> insts;
+    for (auto arg = F->arg_begin(), end=F->arg_end(); arg!=end; ++arg) {
+        values.insert(arg);
+    }
+    for (auto &BB: *F) {
+        for (auto &I: BB) {
+            //llvm::outs() << I << "\n";
+            if (!I.getType()->isVoidTy() )
+                values.insert(&I);
+            insts.insert(&I);
+            for (auto U = I.op_begin(), end = I.op_end(); U!=end; ++U) {
+                if (llvm::dyn_cast<llvm::Constant>(U) == nullptr) {
+                    values.insert(U->get());
+                }
+            }
+        }
+    }
+    for ( llvm::Value *v: values) {
+        llvm::outs() << "v" << v << " [label=\"";
+        v->printAsOperand( llvm::outs() );
+        llvm::outs() << "\"];\n";
+    }
+    for ( llvm::Instruction *i: insts) {
+        llvm::outs() << "i" << i << " [label=\"" << i->getOpcodeName() << "\"];\n";
+    }
+    for (auto &BB: *F) {
+        for (auto &I: BB) {
+            if (!I.getType()->isVoidTy() ) {
+                llvm::outs() << "i" << &I << " -> " << "v" << &I << ";\n";
+            }
+            for (auto U = I.op_begin(), end = I.op_end(); U!=end; ++U) {
+                if (llvm::dyn_cast<llvm::Constant>(U) == nullptr) {
+                    llvm::outs() << "v" << U->get() << " -> i" << &I << ";\n";
+                }
+            }
+        }
+    }
 }
 
 
@@ -78,9 +118,9 @@ void freshRegions(llvm::Module &WP) {
                     llvm::WriteGraph(File, &info, false);
                 llvm::Value *sizeArg = CI->getArgOperand(0);
                 llvm::ConstantInt *sizeConst = llvm::dyn_cast<llvm::ConstantInt>(sizeArg);
+                analyseFunction(caller); //, rv);
                 if (sizeConst) {
                     RegionValue rv(sizeConst->getValue().getLimitedValue(), llvm::dyn_cast<llvm::Value>(U) );
-                    analyseFunction(caller, rv);
                 } else {
                     // Need to walk back up chain to see if the size can be determined
                 }
