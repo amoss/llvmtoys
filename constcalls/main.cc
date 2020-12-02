@@ -2,29 +2,31 @@
 //#include <set>
 //#include <string>
 
-#include "llvm/Analysis/CFGPrinter.h"
+
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 //#include "llvm/Analysis/CallGraph.h"
+#include "llvm/Analysis/CFGPrinter.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
-#include "llvm/IRReader/IRReader.h"
-#include "llvm/IR/Verifier.h"
-#include "llvm/Passes/PassBuilder.h"
-#include "llvm/Linker/Linker.h"
-#include "llvm/Support/ManagedStatic.h"
-#include "llvm/Support/GraphWriter.h"
-//#include "llvm/Support/raw_ostream.h"
-//#include "llvm/Support/raw_os_ostream.h"
-#include "llvm/Support/SMLoc.h"
-#include "llvm/Support/SourceMgr.h"
 #include "llvm/IR/InstrTypes.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/LegacyPassNameParser.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IRReader/IRReader.h"
 #include "llvm/IR/ValueSymbolTable.h"
-#include "llvm/Transforms/IPO/PassManagerBuilder.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/IR/CFG.h"
+#include "llvm/Linker/Linker.h"
+#include "llvm/Passes/PassBuilder.h"
+#include "llvm/Support/GraphWriter.h"
+#include "llvm/Support/ManagedStatic.h"
+//#include "llvm/Support/raw_os_ostream.h"
+//#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/SMLoc.h"
+#include "llvm/Support/SourceMgr.h"
 #include "llvm/Transforms/IPO.h"
+#include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
 // Could use llvm::ValueLatticeElement but it looks far more complex
 class MemberValue {
@@ -56,8 +58,17 @@ llvm::Function *findFunction(llvm::Module &WP, const char *fname) {
     return NULL;
 }
 
-void analyseFunction(llvm::Function *F) { //, RegionValue &rv) {
-    llvm::outs() << "Analysis of " << F->getName() << "\n";
+void analyseFunction(llvm::Function *F, RegionValue &rv) {
+}
+
+void functionFlowGraph(llvm::Function *F) {
+    std::error_code ec;
+    std::string fn = "fg." + F->getName().str() + ".dot";
+    llvm::raw_fd_ostream out(fn,ec);
+    if (ec) return;
+
+    out << "digraph " << F->getName().str() << " {\n";
+
     std::set<llvm::Value*> values;
     std::set<llvm::Instruction*> insts;
     for (auto arg = F->arg_begin(), end=F->arg_end(); arg!=end; ++arg) {
@@ -65,37 +76,57 @@ void analyseFunction(llvm::Function *F) { //, RegionValue &rv) {
     }
     for (auto &BB: *F) {
         for (auto &I: BB) {
-            //llvm::outs() << I << "\n";
+            if (llvm::isa<llvm::BranchInst>(I))
+                continue;
             if (!I.getType()->isVoidTy() )
                 values.insert(&I);
             insts.insert(&I);
             for (auto U = I.op_begin(), end = I.op_end(); U!=end; ++U) {
-                if (llvm::dyn_cast<llvm::Constant>(U) == nullptr) {
+                if (llvm::dyn_cast<llvm::Constant>(U) == nullptr ) {
                     values.insert(U->get());
                 }
             }
         }
     }
     for ( llvm::Value *v: values) {
-        llvm::outs() << "v" << v << " [label=\"";
-        v->printAsOperand( llvm::outs() );
-        llvm::outs() << "\"];\n";
+        out << "v" << v << " [label=\"";
+        v->printAsOperand( out );
+        out << "\"];\n";
     }
     for ( llvm::Instruction *i: insts) {
-        llvm::outs() << "i" << i << " [label=\"" << i->getOpcodeName() << "\"];\n";
+        auto *cb = llvm::dyn_cast<llvm::CallBase>(i);
+        if (cb != nullptr) {
+            out << "i" << cb << " [shape=none,label=\"" << cb->getOpcodeName() << " "
+                         << cb->getCalledFunction()->getName() << "\"];\n";
+        }
+        else
+            out << "i" << i << " [shape=none,label=\"" << i->getOpcodeName() << "\"];\n";
     }
     for (auto &BB: *F) {
         for (auto &I: BB) {
+            if (llvm::isa<llvm::BranchInst>(I))
+                continue;
             if (!I.getType()->isVoidTy() ) {
-                llvm::outs() << "i" << &I << " -> " << "v" << &I << ";\n";
+                out << "i" << &I << " -> " << "v" << &I << ";\n";
             }
             for (auto U = I.op_begin(), end = I.op_end(); U!=end; ++U) {
                 if (llvm::dyn_cast<llvm::Constant>(U) == nullptr) {
-                    llvm::outs() << "v" << U->get() << " -> i" << &I << ";\n";
+                    out << "v" << U->get() << " -> i" << &I << ";\n";
                 }
+            }
+            auto *prev = I.getPrevNonDebugInstruction();
+            if (prev != nullptr)
+                out << "i" << prev << " -> i" << &I << " [style=dashed];\n";
+        }
+        llvm::Instruction *psuedoLast = BB.getTerminator()->getPrevNonDebugInstruction();
+        if (psuedoLast != nullptr) {
+            for(auto *succ: llvm::successors(&BB)) {
+                llvm::Instruction *head = &(*(succ->begin()));
+                out << "i" << psuedoLast << " -> i" << head << " [style=dashed];\n";
             }
         }
     }
+    out << "}\n";
 }
 
 
@@ -118,7 +149,7 @@ void freshRegions(llvm::Module &WP) {
                     llvm::WriteGraph(File, &info, false);
                 llvm::Value *sizeArg = CI->getArgOperand(0);
                 llvm::ConstantInt *sizeConst = llvm::dyn_cast<llvm::ConstantInt>(sizeArg);
-                analyseFunction(caller); //, rv);
+                functionFlowGraph(caller); //, rv);
                 if (sizeConst) {
                     RegionValue rv(sizeConst->getValue().getLimitedValue(), llvm::dyn_cast<llvm::Value>(U) );
                 } else {
