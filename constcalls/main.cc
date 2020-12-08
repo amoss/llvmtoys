@@ -48,6 +48,13 @@ class RegionValue {
 
 };
 
+typedef std::set<llvm::Value*> ReachSet;
+typedef std::map<llvm::Value*,std::unique_ptr<ReachSet>> ReachGraph;
+
+struct FunctionInfo {
+    ReachGraph data, prunedCtrl;
+};
+
 llvm::Function *findFunction(llvm::Module &WP, const char *fname) {
     for (auto &F: WP.functions())
     {
@@ -58,17 +65,28 @@ llvm::Function *findFunction(llvm::Module &WP, const char *fname) {
     return NULL;
 }
 
-typedef std::map<llvm::Value*,std::unique_ptr<std::set<llvm::Value*>>> ReachGraph;
+
 void insert(ReachGraph &g, llvm::Value *src, llvm::Value *dst) {
     if (g.find(src) == g.end()) {
-        g[src] = std::make_unique<std::set<llvm::Value*>>();
+        g[src] = std::make_unique<ReachSet>();
+    }
+    if (g.find(dst) == g.end()) {
+        g[dst] = std::make_unique<ReachSet>();
     }
     g[src]->insert(dst);
 }
 
-void analyseFunction(llvm::Function *F, RegionValue &rv) {
+bool reaches(ReachGraph &g, llvm::Value *src, llvm::Value *dst) {
+    if (g.find(src) == g.end())
+        return false;
+    if (g[src]->find(dst) != g[src]->end())
+        return true;
+    return false;
+}
 
-    ReachGraph data;
+std::unique_ptr<FunctionInfo> analyseFunction(llvm::Function *F/*, RegionValue &rv*/) {
+
+    auto result = std::make_unique<FunctionInfo>();
 
     // Bootstrap the adjacency matrix for data values in the function
     // TODO: This may invert edge direction for gloabls in stores
@@ -76,18 +94,49 @@ void analyseFunction(llvm::Function *F, RegionValue &rv) {
         for (auto &I: BB) {
             for (auto U = I.op_begin(), end = I.op_end(); U!=end; ++U) {
                 if (llvm::dyn_cast<llvm::Constant>(U) == nullptr) {
-                    insert( data, U->get(), &I);
+                    insert( result->data, U->get(), &I);
                 }
             }
         }
     }
 
     // Take powers of the adjacency matrix until we reach a fixed point
+    size_t expansion;
+    do {
+        expansion = 0;
+        for (auto &P: result->data) {
+            size_t orig = P.second->size();
+            ReachSet copy(P.second->begin(), P.second->end());
+            for (auto *dst: copy) {
+                P.second->merge( *result->data[dst] );
+            }
+            expansion += P.second->size() - orig;
+        }
+    } while (expansion>0);
 
-
+    // Prune the control-flow graph by dropping edges that are already covered
+    // by paths in the data-flow.
+    for (auto &BB: *F) {
+        for (auto &I: BB) {
+            if (llvm::isa<llvm::BranchInst>(I))
+                continue;
+            auto *prev = static_cast<llvm::Value*>(I.getPrevNonDebugInstruction());
+            if (prev != nullptr && !reaches(result->data, prev, &I)) {
+                insert(result->prunedCtrl, prev, &I);
+            }
+        }
+        llvm::Instruction *psuedoLast = BB.getTerminator()->getPrevNonDebugInstruction();
+        if (psuedoLast != nullptr) {
+            for(auto *succ: llvm::successors(&BB)) {
+                llvm::Instruction *head = &(*(succ->begin()));
+                insert(result->prunedCtrl, psuedoLast, head);
+            }
+        }
+    }
+    return result;
 }
 
-void functionFlowGraph(llvm::Function *F) {
+void functionFlowGraph(llvm::Function *F, FunctionInfo *fi) {
     std::error_code ec;
     std::string fn = "fg." + F->getName().str() + ".dot";
     llvm::raw_fd_ostream out(fn,ec);
@@ -140,16 +189,21 @@ void functionFlowGraph(llvm::Function *F) {
                     out << "v" << U->get() << " -> i" << &I << ";\n";
                 }
             }
-            auto *prev = I.getPrevNonDebugInstruction();
-            if (prev != nullptr)
-                out << "i" << prev << " -> i" << &I << " [style=dashed];\n";
+            //auto *prev = I.getPrevNonDebugInstruction();
+            //if (prev != nullptr)
+            //    out << "i" << prev << " -> i" << &I << " [style=dashed];\n";
         }
-        llvm::Instruction *psuedoLast = BB.getTerminator()->getPrevNonDebugInstruction();
+        /*llvm::Instruction *psuedoLast = BB.getTerminator()->getPrevNonDebugInstruction();
         if (psuedoLast != nullptr) {
             for(auto *succ: llvm::successors(&BB)) {
                 llvm::Instruction *head = &(*(succ->begin()));
                 out << "i" << psuedoLast << " -> i" << head << " [style=dashed];\n";
             }
+        }*/
+    }
+    for (auto &P: fi->prunedCtrl) {
+        for (auto *dst: *P.second) {
+            out << "i" << P.first << " -> i" << dst << " [style=dashed];\n";
         }
     }
     out << "}\n";
@@ -175,7 +229,8 @@ void freshRegions(llvm::Module &WP) {
                     llvm::WriteGraph(File, &info, false);
                 llvm::Value *sizeArg = CI->getArgOperand(0);
                 llvm::ConstantInt *sizeConst = llvm::dyn_cast<llvm::ConstantInt>(sizeArg);
-                functionFlowGraph(caller); //, rv);
+                auto fi = analyseFunction(caller);
+                functionFlowGraph(caller, fi.get()); //, rv);
                 if (sizeConst) {
                     RegionValue rv(sizeConst->getValue().getLimitedValue(), llvm::dyn_cast<llvm::Value>(U) );
                 } else {
