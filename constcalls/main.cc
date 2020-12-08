@@ -58,7 +58,33 @@ llvm::Function *findFunction(llvm::Module &WP, const char *fname) {
     return NULL;
 }
 
+typedef std::map<llvm::Value*,std::unique_ptr<std::set<llvm::Value*>>> ReachGraph;
+void insert(ReachGraph &g, llvm::Value *src, llvm::Value *dst) {
+    if (g.find(src) == g.end()) {
+        g[src] = std::make_unique<std::set<llvm::Value*>>();
+    }
+    g[src]->insert(dst);
+}
+
 void analyseFunction(llvm::Function *F, RegionValue &rv) {
+
+    ReachGraph data;
+
+    // Bootstrap the adjacency matrix for data values in the function
+    // TODO: This may invert edge direction for gloabls in stores
+    for (auto &BB : *F) {
+        for (auto &I: BB) {
+            for (auto U = I.op_begin(), end = I.op_end(); U!=end; ++U) {
+                if (llvm::dyn_cast<llvm::Constant>(U) == nullptr) {
+                    insert( data, U->get(), &I);
+                }
+            }
+        }
+    }
+
+    // Take powers of the adjacency matrix until we reach a fixed point
+
+
 }
 
 void functionFlowGraph(llvm::Function *F) {
