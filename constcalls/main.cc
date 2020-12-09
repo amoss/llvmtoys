@@ -94,6 +94,7 @@ std::unique_ptr<FunctionInfo> analyseFunction(llvm::Function *F/*, RegionValue &
         for (auto &I: BB) {
             for (auto U = I.op_begin(), end = I.op_end(); U!=end; ++U) {
                 if (llvm::dyn_cast<llvm::Constant>(U) == nullptr) {
+                    llvm::outs() << "Boot " << U->get() << " " << &I << "\n";
                     insert( result->data, U->get(), &I);
                 }
             }
@@ -108,7 +109,7 @@ std::unique_ptr<FunctionInfo> analyseFunction(llvm::Function *F/*, RegionValue &
             size_t orig = P.second->size();
             ReachSet copy(P.second->begin(), P.second->end());
             for (auto *dst: copy) {
-                P.second->merge( *result->data[dst] );
+                P.second->insert( result->data[dst]->begin(), result->data[dst]->end() );
             }
             expansion += P.second->size() - orig;
         }
@@ -131,6 +132,13 @@ std::unique_ptr<FunctionInfo> analyseFunction(llvm::Function *F/*, RegionValue &
                 llvm::Instruction *head = &(*(succ->begin()));
                 insert(result->prunedCtrl, psuedoLast, head);
             }
+        }
+    }
+
+    for (auto &P: result->data) {
+        llvm::outs() << P.first << " " << *P.first << "\n";
+        for (auto *dst: *P.second.get()) {
+            llvm::outs() << "  -> " << dst << " " << *dst << "\n";
         }
     }
     return result;
