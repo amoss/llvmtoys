@@ -48,6 +48,32 @@ class RegionValue {
 
 };
 
+bool constRelativeToCall(llvm::Value *v) {
+    llvm::Instruction *i = llvm::dyn_cast<llvm::Instruction>(v);
+    if (i==nullptr) {
+        if (v->getType()->isPointerTy())
+            return false;
+        if (llvm::dyn_cast<llvm::Constant>(v) != nullptr)
+            return true;
+        if (llvm::dyn_cast<llvm::MemoryAccess>(v) != nullptr)
+            return false;
+        return true;
+    } else {
+        switch (i->getOpcode()) {
+            case llvm::Instruction::Load:
+            case llvm::Instruction::Call:
+                return false;
+            default:
+                for (auto U = i->op_begin(), end = i->op_end(); U!=end; ++U) {
+                    if (!constRelativeToCall(*U))
+                        return false;
+                }
+                return true;
+        }
+    }
+}
+
+
 typedef std::set<llvm::Value*> ReachSet;
 typedef std::map<llvm::Value*,std::unique_ptr<ReachSet>> ReachGraph;
 
@@ -94,7 +120,7 @@ std::unique_ptr<FunctionInfo> analyseFunction(llvm::Function *F/*, RegionValue &
         for (auto &I: BB) {
             for (auto U = I.op_begin(), end = I.op_end(); U!=end; ++U) {
                 if (llvm::dyn_cast<llvm::Constant>(U) == nullptr) {
-                    llvm::outs() << "Boot " << U->get() << " " << &I << "\n";
+                    //llvm::outs() << "Boot " << U->get() << " " << &I << "\n";
                     insert( result->data, U->get(), &I);
                 }
             }
@@ -135,12 +161,12 @@ std::unique_ptr<FunctionInfo> analyseFunction(llvm::Function *F/*, RegionValue &
         }
     }
 
-    for (auto &P: result->data) {
+    /*for (auto &P: result->data) {
         llvm::outs() << P.first << " " << *P.first << "\n";
         for (auto *dst: *P.second.get()) {
             llvm::outs() << "  -> " << dst << " " << *dst << "\n";
         }
-    }
+    }*/
     return result;
 }
 
@@ -239,6 +265,12 @@ void freshRegions(llvm::Module &WP) {
                 llvm::ConstantInt *sizeConst = llvm::dyn_cast<llvm::ConstantInt>(sizeArg);
                 auto fi = analyseFunction(caller);
                 functionFlowGraph(caller, fi.get()); //, rv);
+                if (constRelativeToCall(caller))
+                    llvm::outs() << "Size is static function of input\n";
+                else {
+                    llvm::outs() << "Skipping call on dynamic size\n";
+                    continue;
+                }
                 if (sizeConst) {
                     RegionValue rv(sizeConst->getValue().getLimitedValue(), llvm::dyn_cast<llvm::Value>(U) );
                 } else {
