@@ -51,12 +51,18 @@ class RegionValue {
 bool constRelativeToCall(llvm::Value *v) {
     llvm::Instruction *i = llvm::dyn_cast<llvm::Instruction>(v);
     if (i==nullptr) {
-        if (v->getType()->isPointerTy())
+        if (v->getType()->isPointerTy()) {
+            llvm::outs() << "Pointer (false) <- " << *v << "\n";
             return false;
-        if (llvm::dyn_cast<llvm::Constant>(v) != nullptr)
+        }
+        if (llvm::dyn_cast<llvm::Constant>(v) != nullptr) {
+            llvm::outs() << "Const (true) <- " << *v << "\n";
             return true;
-        if (llvm::dyn_cast<llvm::MemoryAccess>(v) != nullptr)
+        }
+        if (llvm::dyn_cast<llvm::MemoryAccess>(v) != nullptr) {
+            llvm::outs() << "Mem (false) <- " << *v << "\n";
             return false;
+        }
         return true;
     } else {
         switch (i->getOpcode()) {
@@ -265,7 +271,8 @@ void freshRegions(llvm::Module &WP) {
                 llvm::ConstantInt *sizeConst = llvm::dyn_cast<llvm::ConstantInt>(sizeArg);
                 auto fi = analyseFunction(caller);
                 functionFlowGraph(caller, fi.get()); //, rv);
-                if (constRelativeToCall(caller))
+                auto Arg = CI->getArgOperand(0);
+                if (constRelativeToCall(Arg))
                     llvm::outs() << "Size is static function of input\n";
                 else {
                     llvm::outs() << "Skipping call on dynamic size\n";
