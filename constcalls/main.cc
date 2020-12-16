@@ -278,6 +278,12 @@ void freshRegions(llvm::Module &WP) {
                     llvm::outs() << "Skipping call on dynamic size\n";
                     continue;
                 }
+                // 1. Check that the region escapes
+                // 2. Use CloneFunctionInto with an appropriate VMap to make a specialised copy that passes
+                // the constant argument from the call-site.
+                // 3. Run an optimizer pass over the cloned function and check if the malloc arg has become
+                // a contant.
+                // 4. If so - build the region map for the escaped value.
                 if (sizeConst) {
                     RegionValue rv(sizeConst->getValue().getLimitedValue(), llvm::dyn_cast<llvm::Value>(U) );
                 } else {
