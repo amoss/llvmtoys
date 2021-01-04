@@ -28,6 +28,8 @@
 #include "llvm/Transforms/IPO.h"
 #include "llvm/Transforms/IPO/PassManagerBuilder.h"
 
+#include "eval.h"
+
 // Could use llvm::ValueLatticeElement but it looks far more complex
 class MemberValue {
     int offset, size;
