@@ -251,6 +251,38 @@ void functionFlowGraph(llvm::Function *F, FunctionInfo *fi) {
     out << "}\n";
 }
 
+bool checkCallsite(llvm::Function *F, llvm::CallBase *CI) {
+
+    std::set<llvm::Value*> args;
+    for (auto arg = F->arg_begin(), end=F->arg_end(); arg!=end; ++arg) {
+        args.insert(arg);
+    }
+
+    llvm::Value *sizeArg = CI->getArgOperand(0);
+    llvm::APInt sizeVal;
+    std::map<llvm::Value*,llvm::APInt> knowns;
+    std::set<llvm::Value*> unknowns;
+    if (evaluate(sizeArg, knowns, sizeVal, unknowns)) {
+        llvm::outs() << "Callsite arg evaluated as " << sizeVal << "\n";
+        return true;
+    } else if (std::includes(args.begin(), args.end(), unknowns.begin(), unknowns.end())) {
+        llvm::outs() << "Callsite arg " << *sizeArg << " depends only on args" << ": ";
+        for (auto it: unknowns)
+            llvm::outs() << *it << " ";
+        llvm::outs() << "\n";
+        return true;
+    } else {
+        llvm::outs() << "Callsite arg " << *sizeArg << " is dynamic" << ": ";
+        for (auto it: unknowns)
+            llvm::outs() << *it << " ";
+        llvm::outs() << " > ";
+        for (auto it: args)
+            llvm::outs() << *it << " ";
+        llvm::outs() << "\n";
+        return false;
+    }
+}
+
 
 void freshRegions(llvm::Module &WP) {
     llvm::Function *malloc = findFunction(WP, "malloc");
@@ -270,6 +302,10 @@ void freshRegions(llvm::Module &WP) {
                 else
                     llvm::WriteGraph(File, &info, false);
                 llvm::Value *sizeArg = CI->getArgOperand(0);
+                // If the result is true then we can determine the region size if we can substitute
+                // the arguments for constants. Propagate through the call-chain checking for constant
+                // args up to a threshold.
+                checkCallsite(caller, CI);
                 llvm::ConstantInt *sizeConst = llvm::dyn_cast<llvm::ConstantInt>(sizeArg);
                 auto fi = analyseFunction(caller);
                 functionFlowGraph(caller, fi.get()); //, rv);
