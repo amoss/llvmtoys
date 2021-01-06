@@ -2,7 +2,7 @@
 
 if [ $(uname) == "Linux" ] 
 then
-    echo "apt install llvm-11 llvm-11-dev llvm-11-tools"
+    echo "apt install llvm-11 llvm-11-dev llvm-11-tools flex bison"
     echo >.localenv "export LLVMCONFIG="$(dpkg -L llvm-11 | grep llvm-config-11)
     echo >>.localenv "export CC=clang-11"
     echo >>.localenv "export CPPC=clang++-11"

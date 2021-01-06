@@ -10,3 +10,4 @@ tests/netdata/build.sh
 tests/netdata/staticlibs.list
 tests/netdata/extlibs.list
 tests/netdata/units.list
+tests/linux/linux.git
