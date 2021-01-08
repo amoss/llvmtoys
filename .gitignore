@@ -2,12 +2,12 @@
 **/a.out
 .localenv
 tests/netdata/netdata.git
-tests/netdata/units
 tests/netdata/install
-tests/netdata/make.trace
-tests/netdata/make.units
-tests/netdata/build.sh
+tests/**/units
+tests/**/make.trace
+tests/**/make.units
+tests/**/build.sh
+tests/**/units.list
 tests/netdata/staticlibs.list
 tests/netdata/extlibs.list
-tests/netdata/units.list
 tests/linux/linux.git
