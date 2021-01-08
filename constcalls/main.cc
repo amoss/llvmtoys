@@ -284,8 +284,8 @@ bool checkCallsite(llvm::Function *F, llvm::CallBase *CI) {
 }
 
 
-void freshRegions(llvm::Module &WP) {
-    llvm::Function *malloc = findFunction(WP, "malloc");
+void freshRegions(llvm::Module &WP, char *fname) {
+    llvm::Function *malloc = findFunction(WP, fname);
     if (!malloc)  return;
 
     for( llvm::User *U : malloc->users() ) {
@@ -407,6 +407,6 @@ int main(int argc, char **argv) {
 
     llvm::outs() << "After:\n";
     //outputCallSites(WP, argv[1]);
-    freshRegions(WP);
+    freshRegions(WP, argv[1]);
     llvm::llvm_shutdown();
 }
