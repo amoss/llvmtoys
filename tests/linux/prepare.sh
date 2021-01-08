@@ -30,7 +30,7 @@ make --trace CC=clang-11 | tee ../make.trace
 cd ..
 grep 'echo.*CC.*clang-11' make.trace | grep -o '; clang-11[^;]*' >make.units
 cat make.units | grep -o -- '-o [^ ]*[.]o' \
-               | sed 's!^-o \(.*\).o!../units/\1.ll!' >units.list
+               | sed 's!^-o \(.*\).o!units/\1.ll!' >units.list
 cat make.units | sed -e 's/^; clang-11 \(.*\) -o \([^ ]*\)[.]o \(.*\)$/clang-11 \1 -g -S -emit-llvm -o ..\/units\/\2.ll \3/' \
                | grep -v '^;' >build.sh
 chmod +x build.sh
