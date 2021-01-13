@@ -45,10 +45,15 @@ int main(int argc, char **argv) {
         linker.linkInModule(std::move(M));
     }
 
+    std::list<std::string> outsideDecls;
     for (auto &F: WP.functions()) {
         if (F.isDeclaration())
-            std::cout << "Outside " << F.getName().str() << " " << F.getLinkage() << std::endl;
+            outsideDecls.push_back(F.getName().str());
     }
+    outsideDecls.sort();
+    for (auto name: outsideDecls)
+        std::cout << "Outside " << name << " " << std::endl;
+
     for (auto &F: WP.functions()) {
         if (!F.isDeclaration())
             std::cout << "Inside " << F.getName().str() << " " << F.getLinkage() << std::endl;

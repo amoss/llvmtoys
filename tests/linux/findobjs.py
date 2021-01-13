@@ -16,9 +16,9 @@ def findArchiveDeps(archive):
                 elif arg[-2:]=='.o':
                     found_objs.append(arg)
                 else:
-                    print(f"Problem decoding ar command -> {arg}")
+                    print(f"Problem decoding ar command -> {arg}", file=sys.stderr)
             return found_archives, found_objs
-    print(f"ERROR: could not find build step for {archive}")
+    print(f"ERROR: could not find build step for {archive}", file=sys.stderr)
     sys.exit(-1)
 
 # Extract top-level archives and object files used to build vmlinux
@@ -32,13 +32,14 @@ objs = set(objs)
 archivesDone = set()
 while len(archives)>0:
     for a in archives[:]:
-        #print(f"Processing {a}")
+        print(f"Processing {a}", file=sys.stderr)
         archivesDone.add(a)
         archives.remove(a)
         new_a, new_o = findArchiveDeps(a)
         for aa in new_a:
-            if not a in archivesDone and not a in archives:
-                archives.append(a)
+            print(f"Recursing into {aa}", file=sys.stderr)
+            if not aa in archivesDone and not aa in archives:
+                archives.append(aa)
         objs = objs | set(new_o)
 
 for o in objs:
