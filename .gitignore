@@ -8,6 +8,8 @@ tests/**/make.trace
 tests/**/make.units
 tests/**/build.sh
 tests/**/units.list
+tests/**/units.missing
+tests/**/objs.list
 tests/netdata/staticlibs.list
 tests/netdata/extlibs.list
 tests/linux/linux.git

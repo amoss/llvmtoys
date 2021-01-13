@@ -44,5 +44,8 @@ done
 
 popd
 
-# Find the list of object files that built vmlinux
-./findobjs.py >units.list
+# Find the list of object files that built vmlinux, remove any that we cannot convert to LLVM IR
+# (e.g. the assembly stubs).
+./findobjs.py >objs.list
+../../funclist/build.sh && ../../funclist/a.out $(cat objs.list) 2>&1 | grep -o 'units.*ll' >units.missing
+join -v1 <(sort objs.list) <(sort units.missing) >units.list
