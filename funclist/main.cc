@@ -13,6 +13,14 @@
 #include "llvm/ADT/STLExtras.h"
 #include "llvm/ADT/StringRef.h"
 
+/* Simulate the program link.
+
+   Lists any modules that cannot be found/linked into the psuedo target.
+   Afer completion lists which procedure names are inside the target and
+   which are left dangling as external references. This can be used to
+   find out which symbols are in external libraries and/or missing because
+   of module linking problems.
+*/
 int main(int argc, char **argv) {
     if (argc < 2) {
         std::cout << "usage: modlist <IR files>...\n";
@@ -27,12 +35,12 @@ int main(int argc, char **argv) {
         std::unique_ptr<llvm::Module> M = llvm::parseIRFile(argv[i], Diag, C);
         bool broken_debug_info = false;
         if (M.get() == nullptr || llvm::verifyModule(*M, &llvm::errs(), &broken_debug_info)) {
-            llvm::errs() << "error: module not valid\n";
-            return 1;
+            llvm::errs() << "error: module " << argv[i] << " not valid\n";
+            continue;
         }
         if (broken_debug_info) {
             llvm::errs() << "caution: debug info is broken\n";
-            return 1;
+            continue;
         }
         linker.linkInModule(std::move(M));
     }
