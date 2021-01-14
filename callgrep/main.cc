@@ -72,7 +72,7 @@ void emitResult(std::vector<std::string> &path) {
 
 
 int matchNodeName(const char *regex, const char *name) {
-    const char *start = regex;
+    const char *start = regex, *nameStart = name;
     //std::cout << "Test: " << regex << " -> " << name << std::endl;
     while (*regex!=0) {
         if (*regex=='>')
@@ -103,11 +103,48 @@ int matchNodeName(const char *regex, const char *name) {
             return -1;
         }
 
-        /*else if (*regex=='|')
-            ...
+        else if (*regex=='|') {
+            if (*name==0) {
+                while (*regex!=0 && *regex!='>')
+                    regex++;
+                return regex-start;
+            }
+            regex++;
+            name = nameStart;
+            continue;
+        }
 
-        else if (*regex=='[')
-            ...*/
+        else if (*regex=='[') {
+            char hits[256] = {0};
+            while (*regex!=0 && *regex!=']') {
+                if (regex[1]=='-' && regex[2]!=0) {
+                    if (regex[2] < *regex)
+                        throw std::string("Invalid range in regex: ") + regex;
+                    auto *uregex = (unsigned const char*)regex;
+                    for (unsigned char i=*regex; i<=regex[2]; i++)
+                        hits[i] = 1;
+                    regex += 3;
+                } else {
+                    hits[ (unsigned char)*regex ] = 1;
+                    regex++;
+                }
+            }
+            regex++;
+            if (*regex=='*') {
+                regex++;
+                while ( hits[(unsigned char)*name]==1 ) {
+                    int r = matchNodeName(regex,name);
+                    if (r>=0)
+                        return regex-start+r;
+                    name++;
+                }
+                continue;
+            } else if ( hits[(unsigned char)*name]==1 ) {
+                name++;
+                continue;
+            } else
+                return -1;
+        }
 
         else
             throw std::string("Invalid regex:") + regex;
@@ -208,6 +245,7 @@ int main(int argc, char **argv) {
     llvm::Module WP("wholeprogram",C);
     llvm::Linker linker(WP);
 
+    llvm::outs() << "Linking...\n";
     for(int i=2; i<argc; i++) {
         std::unique_ptr<llvm::Module> M = llvm::parseIRFile(argv[i], Diag, C);
         bool broken_debug_info = false;
@@ -221,6 +259,7 @@ int main(int argc, char **argv) {
         }
         linker.linkInModule(std::move(M));
     }
+    llvm::outs() << "Linked. Starting search...\n";
 
     llvm::CallGraph cg(WP);
     try {
