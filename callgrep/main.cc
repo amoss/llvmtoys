@@ -173,15 +173,6 @@ void match(llvm::CallGraphNode* node, std::vector<std::string> &path, std::set<l
     }
     path.push_back(name);
 
-    if (*regex=='>') {
-        if (regex[1]=='+')
-            matchSuccs(node, path, visited, true,  regex+2);
-        else
-            matchSuccs(node, path, visited, false, regex+1);
-        path.pop_back();
-        return;
-    }
-
     int m = matchNodeName(regex,name.c_str());
     if (m<0 && !orMany) {
         path.pop_back();
@@ -193,8 +184,18 @@ void match(llvm::CallGraphNode* node, std::vector<std::string> &path, std::set<l
             emitResult(path);
             llvm::outs() << "\n";
         }
-        else
-            matchSuccs(node, path, visited, false, regex+m);     // path-step, overwrite orMany flag
+        else if (regex[m]=='>') {
+            if (regex[1]=='+')
+                matchSuccs(node, path, visited, true,  regex+m+2);
+            else
+                matchSuccs(node, path, visited, false, regex+m+1);
+            path.pop_back();
+            return;
+        }
+        else {
+            // Only a partial match on the node-name, e.g. a prefix, doesn't hit the implicit anchors so
+            // fail. But fall-through to handle orMany==true.
+        }
     }
 
     if (orMany)
