@@ -100,10 +100,19 @@ int matchNodeName(const char *regex, const char *name) {
                 name++;
                 continue;
             }
-            return -1;
+            // Failed to match, scan to check for choice
+            while (*regex!=0 && *regex!='|')
+                regex++;
+            if (*regex==0)
+                return -1;
+            //std::cout << "Jump to choice: " << regex << " -> " << name << std::endl;
+            name = nameStart;
+            regex++;
+            continue;
         }
 
         else if (*regex=='|') {
+            //std::cout << "Hit choice: " << regex << " -> " << name << std::endl;
             if (*name==0) {
                 while (*regex!=0 && *regex!='>')
                     regex++;
@@ -111,6 +120,7 @@ int matchNodeName(const char *regex, const char *name) {
             }
             regex++;
             name = nameStart;
+            //std::cout << "Restart: " << regex << " -> " << name << std::endl;
             continue;
         }
 
